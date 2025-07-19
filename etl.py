@@ -1,6 +1,6 @@
 import pyodbc
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta,timezone
 import time
 from site_param import SITES, SITES_RUN
 from sql_param import EVENTFRAME_TEMP_TABLE, EVENTFRAME_TEMP_COLUMNS, SITES_SQL_SDL_LIMIT_Transform,DB_CONFIG,get_map_db_col
@@ -145,7 +145,8 @@ def get_last_update_time(conn, site):
 
 def clean_eventframe_data(data):
     """Remove any row where 'End Time' is '9999-12-31T23:59:59Z'."""
-    return [row for row in data if row.get('End Time') != '9999-12-31T19:59:59']
+
+    return [r for r in data if not (r.get('End Time') or '').startswith('9999-12-31')]
 
 if __name__ == "__main__":
     print(f"--- SQL Server Connection ---")
@@ -190,14 +191,14 @@ if __name__ == "__main__":
                     conn = get_db_connection()
                     print(f"Checking for new events for site: {site}")
                     # Get the last 1 days from now (UTC)
-                    start_time = (datetime.utcnow() - timedelta(days=1)).replace(microsecond=0).isoformat()
+                    start_time = (datetime.now(timezone.utc) - timedelta(hours=8)).replace(microsecond=0).isoformat()
                     print(f"Fetching events for {site} from: {start_time}")
-                    data, _ = fetch_eventframes(site)
+                    data, _ = fetch_eventframes(site,start_time)
                     data = clean_eventframe_data(data)
                     if data:
                         print(f"Loaded {len(data)} rows from PI Web API for {site}.")
                         insert_eventframes(conn, data, site)
-                        print(f"Inse rted new events for {site}.")
+                        print(f"Inserted new events for {site}.")
                     else:
                         print(f"No new events for {site}.")
                     conn.close()

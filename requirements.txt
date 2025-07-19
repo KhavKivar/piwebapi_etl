@@ -1,0 +1,7 @@
+pyodbc
+requests
+urllib3
+python-dateutil
+python-dotenv
+openpyxl
+requests-negotiate-sspi; platform_system == "Windows"

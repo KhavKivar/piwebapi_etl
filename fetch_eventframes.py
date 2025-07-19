@@ -43,7 +43,7 @@ def to_site_local(utc_dt: datetime, site: str) -> datetime:
     
 
 # start time utc 
-def fetch_eventframes(site, start_time, end_time=datetime.now(timezone.utc)):
+def fetch_eventframes(site, start_time, end_time=datetime.now(timezone.utc),debugMode=False):
     if start_time is None or site is None:
         print("❌ Invalid parameters: start_time and site must be provided.")
         return
@@ -77,11 +77,13 @@ def fetch_eventframes(site, start_time, end_time=datetime.now(timezone.utc)):
             session.auth = AUTH
             try:
                 resp = session.get(url, verify=False, headers={'Accept': 'application/json'})
-                print(f"🔗 Fetching Event Frames from: {url}\n    Range: {start} to {end}")
+                if debugMode:
+                    print(f"🔗 Fetching Event Frames from: {url}\n    Range: {start} to {end}")
                 resp.raise_for_status()
                 data = resp.json()
             except Exception as e:
-                print(f"❌ Error fetching Event Frames: {e}")
+                if debugMode:
+                    print(f"❌ Error fetching Event Frames: {e}")
                 continue
             items = data.get('Items', [])
             if len(items) >= chunk_size:
@@ -92,9 +94,10 @@ def fetch_eventframes(site, start_time, end_time=datetime.now(timezone.utc)):
             elif not items:
                 continue
             else:
-                print(f"🔍 Found {len(items)} Event Frames. Fetching attributes...\n    Range: {start} to {end}")
+                if debugMode:
+                    print(f"🔍 Found {len(items)} Event Frames. Fetching attributes...\n    Range: {start} to {end}")
                 with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-                    futures = [executor.submit(fetch_attributes, session, ef, AUTH,site) for ef in items]
+                    futures = [executor.submit(fetch_attributes, session, ef, AUTH,site,debugMode) for ef in items]
                     for f in as_completed(futures):
                         row_data, attr_names = f.result()
                         all_data.append(row_data)
@@ -103,7 +106,7 @@ def fetch_eventframes(site, start_time, end_time=datetime.now(timezone.utc)):
 
 
 
-def fetch_attributes(session, ef, AUTH, site):
+def fetch_attributes(session, ef, AUTH, site,debugMode=False):
     # Parse UTC times
     start_time_utc = ef.get('StartTime')
     end_time_utc = ef.get('EndTime')
@@ -136,7 +139,8 @@ def fetch_attributes(session, ef, AUTH, site):
     
     attributes_link = ef.get('Links', {}).get('Attributes')
     if not attributes_link:
-        print(f"✔️  Event Frame '{ef.get('Name')}' has no attributes link.")
+        if debugMode:
+            print(f"✔️  Event Frame '{ef.get('Name')}' has no attributes link.")
         return ef_row_data, set()
 
     attribute_names = set()
@@ -178,11 +182,12 @@ def fetch_attributes(session, ef, AUTH, site):
                     for key, val in results:
                         ef_row_data[key] = val
                         attribute_names.add(key)
-
-            print(f"✅ Successfully fetched all attributes for Event Frame: '{ef.get('Name')}'")
+            if debugMode:
+                print(f"✅ Successfully fetched all attributes for Event Frame: '{ef.get('Name')}'")
 
     except Exception as e:
-        print(f"❌ Error fetching attributes for EF '{ef.get('Name')}': {e}")
+        if debugMode:
+            print(f"❌ Error fetching attributes for EF '{ef.get('Name')}': {e}")
 
     return ef_row_data, attribute_names
 
