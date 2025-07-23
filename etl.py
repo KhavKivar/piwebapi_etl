@@ -177,7 +177,7 @@ if __name__ == "__main__":
         delete_rows_for_site(conn, site)
         print(f"Fetching event frame data for site: {site} via webapi_ETL.py...")
         start_time = '2025-01-01T00:00:00'
-        data, _ = fetch_eventframes(site,start_time)
+        data, _ = fetch_eventframes(site,start_time,datetime.now(timezone.utc),True)
         data = clean_eventframe_data(data)
         print(f"Loaded {len(data)} rows from PI Web API.")
         insert_eventframes(conn, data, site)
@@ -191,7 +191,7 @@ if __name__ == "__main__":
                     conn = get_db_connection()
                     print(f"Checking for new events for site: {site}")
                     # Get the last 1 days from now (UTC)
-                    start_time = (datetime.now(timezone.utc) - timedelta(hours=8)).replace(microsecond=0).isoformat()
+                    start_time = (datetime.now(timezone.utc) - timedelta(hours=3)).replace(microsecond=0).isoformat()
                     print(f"Fetching events for {site} from: {start_time}")
                     data, _ = fetch_eventframes(site,start_time)
                     data = clean_eventframe_data(data)
@@ -202,8 +202,8 @@ if __name__ == "__main__":
                     else:
                         print(f"No new events for {site}.")
                     conn.close()
-                print("Waiting 20 minutes before next check...")
-                time.sleep(1200)
+                print("Waiting 60 minutes before next check...")
+                time.sleep(3600)
         except KeyboardInterrupt:
             print("Stopped by user.")
         finally:

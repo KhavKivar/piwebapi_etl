@@ -9,7 +9,7 @@ DB_CONFIG = {
 
 
 # --- Table/Column Definitions ---
-EVENTFRAME_TEMP_TABLE = 'eventframe_cache'
+EVENTFRAME_TEMP_TABLE = 'eventframe_cache_v2'
 
 EVENTFRAME_TEMP_COLUMNS = [
     'event_frame_name', 'start_time', 'end_time','start_time_utc','end_time_utc','template_name', 'webid', 'id', 'description', 'excursion',
