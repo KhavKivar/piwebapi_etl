@@ -5,6 +5,13 @@ import time
 from site_param import SITES, SITES_RUN
 from sql_param import EVENTFRAME_TEMP_TABLE, EVENTFRAME_TEMP_COLUMNS, SITES_SQL_SDL_LIMIT_Transform,DB_CONFIG,get_map_db_col
 from fetch_eventframes import fetch_eventframes
+import re
+import json
+from dateutil.parser import parse as parse_date
+import time as timer
+
+EVENTFRAME_TEMP_TABLE_TEST = "eventframe_test"
+
 
 def get_db_connection():
     conn_str_parts = [
@@ -20,10 +27,12 @@ def get_db_connection():
     conn_str = "".join(conn_str_parts)
     return pyodbc.connect(conn_str)
 
-def create_eventframe_temp_table(conn):
+def create_eventframe_temp_table(conn, table_name=None):
+    if table_name is None:
+        table_name = EVENTFRAME_TEMP_TABLE
     cursor = conn.cursor()
     float_cols = {'excursion_value', 'sdlh', 'soldh', 'sdll', 'soll', 'maximum_value', 'minimum_value', 'sdl_limit'}
-    datetime_cols = {'start_time', 'end_time', 'last_update', 'start_time_utc', 'end_time_utc'}  # <-- add utc columns here
+    datetime_cols = {'start_time', 'end_time', 'last_update', 'start_time_utc', 'end_time_utc'}
     columns_sql = []
     for col in EVENTFRAME_TEMP_COLUMNS:
         if col == 'id':
@@ -34,24 +43,23 @@ def create_eventframe_temp_table(conn):
             columns_sql.append(f"[{col}] DATETIME NULL")
         else:
             columns_sql.append(f"[{col}] NVARCHAR(MAX) NULL")
-    create_sql = f"IF OBJECT_ID('{EVENTFRAME_TEMP_TABLE}', 'U') IS NOT NULL DROP TABLE {EVENTFRAME_TEMP_TABLE}; " \
-                 f"CREATE TABLE {EVENTFRAME_TEMP_TABLE} ({', '.join(columns_sql)});"
+    create_sql = f"IF OBJECT_ID('{table_name}', 'U') IS NOT NULL DROP TABLE {table_name}; " \
+                 f"CREATE TABLE {table_name} ({', '.join(columns_sql)});"
     cursor.execute(create_sql)
     conn.commit()
-    print(f"Table '{EVENTFRAME_TEMP_TABLE}' created.")
+    print(f"Table '{table_name}' created.")
 
-def insert_eventframes(conn, data, current_site):
-    import re
-    import json
-    from dateutil.parser import parse as parse_date
-    import time as timer
+def insert_eventframes(conn, data, current_site, table_name=None):
+    if table_name is None:
+        table_name = EVENTFRAME_TEMP_TABLE
+
     cursor = conn.cursor()
     cursor.fast_executemany = True
-    float_cols = {'excursion_value', 'sdlh', 'soldh', 'sdll', 'soll', 'maximum_value', 'minimum_value', 'sdl_limit'}
-    datetime_cols = {'start_time', 'end_time','start_time_utc','end_time_utc', 'last_update'}  # <-- add utc columns here
+    float_cols = {'excursion_value', 'sdlh', 'soldh', 'sdll', 'soll', 'maximum_value', 'minimum_value', 'sdl_limit','excursion_duration'}
+    datetime_cols = {'start_time', 'end_time','start_time_utc','end_time_utc', 'last_update'}
     map_db_col = get_map_db_col(current_site)
     placeholders = ", ".join(["?"] * len(EVENTFRAME_TEMP_COLUMNS))
-    insert_sql = f"INSERT INTO {EVENTFRAME_TEMP_TABLE} ({', '.join(f'[{col}]' for col in EVENTFRAME_TEMP_COLUMNS)}) VALUES ({placeholders})"
+    insert_sql = f"INSERT INTO {table_name} ({', '.join(f'[{col}]' for col in EVENTFRAME_TEMP_COLUMNS)}) VALUES ({placeholders})"
     success_count = 0
     time_when_inserted = datetime.now()
     start_timer = timer.time()
@@ -95,14 +103,11 @@ def insert_eventframes(conn, data, current_site):
                     val = row.get(map_db_col[col], None)
                     if isinstance(val, str):
                         try:
-                            # Remove trailing Z if present
                             val = val.rstrip('Z')
-                            # If fractional seconds, keep only up to 6 digits (SQL Server DATETIME2 supports up to 7)
                             if '.' in val:
                                 date_part, frac = val.split('.')
-                                # Remove any timezone info after fractional seconds
                                 frac = ''.join([c for c in frac if c.isdigit()])
-                                frac = frac[:6]  # up to microseconds
+                                frac = frac[:6]
                                 val = f"{date_part}.{frac}"
                             val = parse_date(val)
                         except Exception:
@@ -123,16 +128,18 @@ def insert_eventframes(conn, data, current_site):
     conn.commit()
     end_timer = timer.time()
     elapsed = end_timer - start_timer
-    print(f"Inserted {success_count} rows into '{EVENTFRAME_TEMP_TABLE}'. (Attempted {len(data)})")
+    print(f"Inserted {success_count} rows into '{table_name}'. (Attempted {len(data)})")
     print(f"Database write time: {elapsed:.2f} seconds.")
 
-def delete_rows_for_site(conn, site):
+def delete_rows_for_site(conn, site, table_name=None):
+    if table_name is None:
+        table_name = EVENTFRAME_TEMP_TABLE
     cursor = conn.cursor()
-    sql = f"DELETE FROM {EVENTFRAME_TEMP_TABLE} WHERE site = ?"
+    sql = f"DELETE FROM {table_name} WHERE site = ?"
     try:
         cursor.execute(sql, site)
         conn.commit()
-        print(f"Deleted all rows for site '{site}' from table '{EVENTFRAME_TEMP_TABLE}'.")
+        print(f"Deleted all rows for site '{site}' from table '{table_name}'.")
     except Exception as e:
         print(f"Error deleting rows for site '{site}': {e}")
 
@@ -184,6 +191,22 @@ if __name__ == "__main__":
         print("Data integration complete.")
         print("\n--- Test Complete ---")
         conn.close()
+
+    elif command == "test":
+        site = "CHILE"
+        print(f"[TESTING] Running ETL for site: {site}")
+        create_eventframe_temp_table(conn, table_name=EVENTFRAME_TEMP_TABLE_TEST)
+        # Delete rows for site in test table
+        # delete_rows_for_site(conn, site, table_name=EVENTFRAME_TEMP_TABLE_TEST)
+        print(f"Fetching event frame data for site: {site} via webapi_ETL.py...")
+        start_time = '2025-01-01T00:00:00'
+        data, _ = fetch_eventframes(site,start_time,datetime.now(timezone.utc),True)
+        data = clean_eventframe_data(data)
+        print(f"Loaded {len(data)} rows from PI Web API.")
+        insert_eventframes(conn, data, site, table_name=EVENTFRAME_TEMP_TABLE_TEST)
+        print("Data integration complete.")
+        print("\n--- Test Complete ---")
+        conn.close()
     elif command == "run":
         try:
             while True:
@@ -191,7 +214,7 @@ if __name__ == "__main__":
                     conn = get_db_connection()
                     print(f"Checking for new events for site: {site}")
                     # Get the last 1 days from now (UTC)
-                    start_time = (datetime.now(timezone.utc) - timedelta(hours=3)).replace(microsecond=0).isoformat()
+                    start_time = (datetime.now(timezone.utc) - timedelta(hours=8)).replace(microsecond=0).isoformat()
                     print(f"Fetching events for {site} from: {start_time}")
                     data, _ = fetch_eventframes(site,start_time)
                     data = clean_eventframe_data(data)

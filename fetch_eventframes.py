@@ -179,20 +179,7 @@ def fetch_eventframes(site: str,
 # Attribute fetch (thread-safe)
 # ---------------------------------------------------------------------------
 
-def _extract_value_payload(val_data: Any) -> Any:
-    """Extract the actual value from a PI Web API value payload.
 
-    Common payload shapes:
-    {"Value": 123, ...}
-    {"Value": {"Value": 123, ...}, ...}
-    """
-    if isinstance(val_data, dict):
-        if 'Value' in val_data:
-            v = val_data['Value']
-            if isinstance(v, dict) and 'Value' in v:
-                return v['Value']
-            return v
-    return val_data
 
 
 def fetch_attributes(_unused_session, ef: Dict[str, Any], AUTH: Any, site: str, debugMode: bool = False):
@@ -265,7 +252,7 @@ def fetch_attributes(_unused_session, ef: Dict[str, Any], AUTH: Any, site: str, 
                     val_resp = sess.get(value_link, verify=False, headers={'Accept': 'application/json'})
                     val_resp.raise_for_status()
                     val_data = val_resp.json()
-                    actual_value = _extract_value_payload(val_data)
+                    actual_value = val_data.get('Value')
                 else:
                     actual_value = attr.get('Value')
 
