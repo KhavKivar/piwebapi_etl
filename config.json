@@ -109,5 +109,5 @@
     }
   },
   "sites_list": ["TRINIDAD", "CHILE", "EGYPT", "MEDICINE HAT", "GEISMAR"],
-  "sites_run": ["TRINIDAD", "CHILE", "EGYPT", "MEDICINE HAT"]
+  "sites_run": ["TRINIDAD", "CHILE", "EGYPT", "MEDICINE HAT","GEISMAR"]
 }
