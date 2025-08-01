@@ -1,0 +1,113 @@
+{
+  "database": {
+    "server": "usgei-db03",
+    "database": "sdlsolexcursions",
+    "Trusted_Connection": "yes",
+    "driver": "{ODBC Driver 17 for SQL Server}"
+  },
+  "tables": {
+    "eventframe_temp_table": "eventframe_cache",
+    "eventframe_test_table": "eventframe_test",
+    "eventframe_temp_columns": [
+      "event_frame_name", "start_time", "end_time", "start_time_utc", "end_time_utc",
+      "template_name", "webid", "id", "description", "excursion", "excursion_duration",
+      "excursion_type", "excursion_value", "sdlh", "soldh", "sdll", "soll",
+      "maximum_value", "minimum_value", "plant", "tag_name", "type", "url", "units",
+      "sdl_limit", "last_update", "site"
+    ]
+  },
+  "sites": {
+    "TRINIDAD": {
+      "PIWEBAPI_URL": "https://ttpospivision.methanex.com/piwebapi",
+      "ASSET_DATABASE_WEBID": "F1RDCLdjDokp3kWftXNPq0UmFQQwdjCyMuH0mM_tnAPrO5FQVFRQT1NQSUFGXFNETFM",
+      "TEMPLATE_NAME": "DL Excursion template",
+      "TIMEZONE": "America/Port_of_Spain",
+      "AUTH": "BASIC",
+      "sql_transform": {
+        "sdlh": "Hi",
+        "soldh": "HiHi",
+        "sdll": "Lo",
+        "soll": "LoLo"
+      },
+      "sdl_limit_transform": {
+        "> High Limit": "sdlh",
+        "< Low Limit": "sdll"
+      }
+    },
+    "CHILE": {
+      "PIWEBAPI_URL": "https://172.23.30.169/piwebapi",
+      "ASSET_DATABASE_WEBID": "F1RD6Ew1kSeFNUyFQrUXcrO70g03BYlHlou0y-M9Z9dMvckgQ0xQVVEtRE1aLVBJMTBcR0xPQkFMIFNETC1TT0w",
+      "TEMPLATE_NAME": "Excursion template",
+      "TIMEZONE": "America/Punta_Arenas",
+      "AUTH": "BASIC",
+      "sql_transform": {
+        "sdlh": "SDLH",
+        "soldh": "SOLH",
+        "sdll": "SDLL",
+        "soll": "SOLL"
+      },
+      "sdl_limit_transform": {
+        "> SDLH": "sdlh",
+        "> SOLH": "soldh",
+        "< SOLL": "soll"
+      }
+    },
+    "EGYPT": {
+      "PIWEBAPI_URL": "https://egdampivision.methanex.com/piwebapi",
+      "ASSET_DATABASE_WEBID": "F1RDhsfwLx8hIE--odjfLeCRvwOWL8NbI0hEuoSR89kBwTBgRUdEQU0tRE1aLVBJMDdcR0xPQkFMIFNETC9TT0w",
+      "TEMPLATE_NAME": "Excursion template",
+      "TIMEZONE": "Africa/Cairo",
+      "AUTH": "KERBEROS",
+      "sql_transform": {
+        "sdlh": "SDLH",
+        "soldh": "SOLH",
+        "sdll": "SDLL",
+        "soll": "SOLL"
+      },
+      "sdl_limit_transform": {
+        "> SDLH": "sdlh",
+        "> SOLH": "soldh",
+        "< SOLL": "soll",
+        "< SDLL": "sdll"
+      }
+    },
+    "MEDICINE HAT": {
+      "PIWEBAPI_URL": "https://172.23.70.92/piwebapi",
+      "ASSET_DATABASE_WEBID": "F1RDiLJir8da-0y1BCWMBY2dJgZmxKEfU9N0qlOg5Yb97UZATVhDQU1FRFNWMDEyXEdMT0JBTCBTT0w",
+      "TEMPLATE_NAME": "Excursion template",
+      "TIMEZONE": "America/Edmonton",
+      "AUTH": "BASIC",
+      "sql_transform": {
+        "sdlh": "SDLH",
+        "soldh": "SOLH",
+        "sdll": "SDLL",
+        "soll": "SOLL"
+      },
+      "sdl_limit_transform": {
+        "> SDLH": "sdlh",
+        "> SOLH": "soldh",
+        "< SOLL": "soll"
+      }
+    },
+    "GEISMAR": {
+      "PIWEBAPI_URL": "https://usgei-piap02.methanex.com/piwebapi",
+      "ASSET_DATABASE_WEBID": "F1RDxSQ6_dR9nE6dPqMFyGl6eguKX3z6x5I0KMowmlaq5D_wVVNHRUlQSUFGXEdMT0JBTCBTREwtU09M",
+      "TEMPLATE_NAME": "Excursion template",
+      "TIMEZONE": "America/Chicago",
+      "AUTH": "BASIC",
+      "sql_transform": {
+        "sdlh": "SDLH",
+        "soldh": "SOLH",
+        "sdll": "SDLL",
+        "soll": "SOLL"
+      },
+      "sdl_limit_transform": {
+        "> SDLH": "sdlh",
+        "> SOLH": "soldh",
+        "< SOLL": "soll"
+      }
+    }
+  },
+  "sites_list": ["TRINIDAD", "CHILE", "EGYPT", "MEDICINE HAT", "GEISMAR"],
+  "sites_run": ["TRINIDAD", "CHILE", "EGYPT", "MEDICINE HAT"]
+}
