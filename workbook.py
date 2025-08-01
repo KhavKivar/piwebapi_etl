@@ -26,7 +26,7 @@ def get_db_connection():
     return pyodbc.connect(conn_str)
 
 if __name__ == "__main__":
-    table = 'new_zealand2'
+    table = 'dbo.geismar_merged'
     query = f"SELECT * FROM {table}"
     
     try:

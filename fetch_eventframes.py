@@ -160,11 +160,15 @@ def fetch_eventframes(site: str,
             # NOTE: PI returns 'EndTime' (camel-case). Old code used 'End Time' -> always empty.
             items = [ef for ef in items if not (ef.get('EndTime') or '').startswith('9999-12-31')]
 
+            # Filter out Event Frames containing specific name
+            #items = [ef for ef in items if 'G3-3PDI10806.PV' not in (ef.get('Name') or '')]
+
             if debugMode:
-                print(f"🔍 {len(items)} Event Frames after filtering. Fetching attributes…")
+                print(f"🔍 {len(items)} Event Frames after filtering, current data: {len(all_data)}. Fetching attributes…")
 
             # Parallel attribute fetches (thread-safe: one Session per thread)
             with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+
                 futures = [executor.submit(fetch_attributes, None, ef, AUTH, site, debugMode)
                            for ef in items]
                 for f in as_completed(futures):
@@ -277,7 +281,8 @@ def fetch_attributes(_unused_session, ef: Dict[str, Any], AUTH: Any, site: str, 
                         attribute_names.add(key)
 
         if debugMode:
-            print(f"✅ Successfully fetched {len(attribute_names)} attributes for EF: '{ef.get('Name')}'")
+            timespan = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+            print(f"✅ Successfully fetched {len(attribute_names)} attributes for EF: '{ef.get('Name')}' ({timespan})")
 
     return ef_row_data, attribute_names
 

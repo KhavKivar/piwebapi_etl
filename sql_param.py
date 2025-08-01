@@ -1,7 +1,7 @@
 
 
 DB_CONFIG = {
-    'server': 'usgei-dbts01',  
+    'server': 'usgei-db03',  
     'database': 'sdlsolexcursions',      
     'Trusted_Connection': 'yes',             
     'driver': '{ODBC Driver 17 for SQL Server}' 
@@ -9,7 +9,7 @@ DB_CONFIG = {
 
 
 # --- Table/Column Definitions ---
-EVENTFRAME_TEMP_TABLE = 'eventframe_cache_v2'
+EVENTFRAME_TEMP_TABLE = 'eventframe_cache'
 
 EVENTFRAME_TEMP_COLUMNS = [
     'event_frame_name', 'start_time', 'end_time','start_time_utc','end_time_utc','template_name', 'webid', 'id', 'description', 'excursion',
@@ -41,6 +41,12 @@ SITES_SQL_Transform = {
         'soldh': 'SOLH',
         'sdll': 'SDLL',
         'soll': 'SOLL'
+    },
+    'GEISMAR': {
+        'sdlh': 'SDLH',
+        'soldh': 'SOLH',
+        'sdll': 'SDLL',
+        'soll': 'SOLL'
     }
 }
 SITES_SQL_SDL_LIMIT_Transform = {
@@ -59,6 +65,12 @@ SITES_SQL_SDL_LIMIT_Transform = {
         '< SOLL': 'soll',
     },
     'EGYPT': {
+        '> SDLH': 'sdlh',
+        '> SOLH': 'soldh',
+        '< SOLL': 'soll',
+        '< SDLL': 'sdll'
+    },
+    'GEISMAR': {
         '> SDLH': 'sdlh',
         '> SOLH': 'soldh',
         '< SOLL': 'soll',

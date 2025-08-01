@@ -9,6 +9,8 @@ import re
 import json
 from dateutil.parser import parse as parse_date
 import time as timer
+import csv
+import os
 
 EVENTFRAME_TEMP_TABLE_TEST = "eventframe_test"
 
@@ -49,23 +51,178 @@ def create_eventframe_temp_table(conn, table_name=None):
     conn.commit()
     print(f"Table '{table_name}' created.")
 
-def insert_eventframes(conn, data, current_site, table_name=None):
+def process_row_data(row, current_site, time_when_inserted):
+    """Process a single row of data and return the values for database insertion"""
+    float_cols = {'excursion_value', 'sdlh', 'soldh', 'sdll', 'soll', 'maximum_value', 'minimum_value', 'sdl_limit','excursion_duration'}
+    datetime_cols = {'start_time', 'end_time','start_time_utc','end_time_utc', 'last_update'}
+    map_db_col = get_map_db_col(current_site)
+    
+    temp_row = {}
+    row_values = []
+    
+    for col in EVENTFRAME_TEMP_COLUMNS:
+        if col == 'sdl_limit':
+            sdl_limit = None
+            for key, value in SITES_SQL_SDL_LIMIT_Transform[current_site].items():
+                if temp_row.get('excursion') == key:
+                    sdl_limit = temp_row.get(value)
+                    break
+            val = sdl_limit
+        elif col == 'last_update':
+            val = time_when_inserted
+        elif col == 'site':
+            val = current_site
+        else:
+            excel_col = map_db_col[col]
+            val = row.get(excel_col, None)
+            if isinstance(val, str) and val.strip().upper() == 'N/A':
+                val = None
+            elif col == 'excursion_type' and isinstance(val, str):
+                try:
+                    match = re.match(r'\s*\{.*?"?Name"?\s*:\s*[\'\"](.*?)[\'\"].*?\}', val)
+                    if match:
+                        val = match.group(1)
+                    else:
+                        obj = json.loads(val.replace("'", '"'))
+                        if isinstance(obj, dict) and 'Name' in obj:
+                            val = obj['Name']
+                except Exception:
+                    pass
+            elif col in float_cols:
+                try:
+                    val = float(val) if val not in (None, '', 'N/A') else None
+                except Exception:
+                    val = None
+            elif col in datetime_cols:
+                val = row.get(map_db_col[col], None)
+                if isinstance(val, str):
+                    try:
+                        val = val.rstrip('Z')
+                        if '.' in val:
+                            date_part, frac = val.split('.')
+                            frac = ''.join([c for c in frac if c.isdigit()])
+                            frac = frac[:6]
+                            val = f"{date_part}.{frac}"
+                        val = parse_date(val)
+                    except Exception:
+                        val = None
+                elif not isinstance(val, datetime):
+                    val = None
+            elif col == 'tag_name' and isinstance(val, str):
+                val = re.split(r'[ _]', val)[0]
+        
+        temp_row[col] = val
+        row_values.append(val)
+    
+    return row_values
+
+def insert_eventframes(conn, data, current_site, table_name=None, use_fast_insert=True):
     if table_name is None:
         table_name = EVENTFRAME_TEMP_TABLE
 
     cursor = conn.cursor()
-    cursor.fast_executemany = True
-    float_cols = {'excursion_value', 'sdlh', 'soldh', 'sdll', 'soll', 'maximum_value', 'minimum_value', 'sdl_limit','excursion_duration'}
-    datetime_cols = {'start_time', 'end_time','start_time_utc','end_time_utc', 'last_update'}
-    map_db_col = get_map_db_col(current_site)
+    if use_fast_insert:
+        cursor.fast_executemany = True
+
     placeholders = ", ".join(["?"] * len(EVENTFRAME_TEMP_COLUMNS))
     insert_sql = f"INSERT INTO {table_name} ({', '.join(f'[{col}]' for col in EVENTFRAME_TEMP_COLUMNS)}) VALUES ({placeholders})"
     success_count = 0
     time_when_inserted = datetime.now()
     start_timer = timer.time()
+
+    if use_fast_insert:
+        # Fast batch insert approach
+        data_parse = []
+        
+        for idx, row in enumerate(data, 1):
+            row_values = process_row_data(row, current_site, time_when_inserted)
+            data_parse.append(row_values)
+            success_count += 1
+            
+            if idx % 50 == 0:
+                print(f"Processed {idx} rows...")
+
+        try:
+            cursor.executemany(insert_sql, data_parse)
+            conn.commit()
+            end_timer = timer.time()
+            elapsed = end_timer - start_timer
+            print(f"Inserted {success_count} rows into '{table_name}' using FAST batch insert. (Attempted {len(data)})")
+            print(f"Database write time: {elapsed:.2f} seconds.")
+        except Exception as e:
+            print(f"Error during batch insert: {e}")
+            raise
+    
+    else:
+        # Slow individual insert approach
+        for idx, row in enumerate(data, 1):
+            try:
+                row_values = process_row_data(row, current_site, time_when_inserted)
+                cursor.execute(insert_sql, row_values)
+                success_count += 1
+                
+                if idx % 50 == 0:
+                    print(f"Processed {idx} rows...")
+                    conn.commit()  # Commit every 50 rows
+                    
+            except Exception as e:
+                print(f"Error inserting row {idx}: {e}")
+                continue
+
+        # Final commit for any remaining rows
+        try:
+            conn.commit()
+            end_timer = timer.time()
+            elapsed = end_timer - start_timer
+            print(f"Inserted {success_count} rows into '{table_name}' using SLOW individual insert. (Attempted {len(data)})")
+            print(f"Database write time: {elapsed:.2f} seconds.")
+        except Exception as e:
+            print(f"Error during final commit: {e}")
+            raise
+
+def delete_rows_for_site(conn, site, table_name=None):
+    if table_name is None:
+        table_name = EVENTFRAME_TEMP_TABLE
+    cursor = conn.cursor()
+    sql = f"DELETE FROM {table_name} WHERE site = ?"
+    try:
+        cursor.execute(sql, site)
+        conn.commit()
+        print(f"Deleted all rows for site '{site}' from table '{table_name}'.")
+    except Exception as e:
+        print(f"Error deleting rows for site '{site}': {e}")
+
+def get_last_update_time(conn, site):
+    cursor = conn.cursor()
+    sql = f"SELECT MAX(last_update) FROM {EVENTFRAME_TEMP_TABLE} WHERE site = ?"
+    cursor.execute(sql, site)
+    result = cursor.fetchone()
+    return result[0] if result and result[0] else None
+
+def clean_eventframe_data(data):
+    """Remove any row where 'End Time' is '9999-12-31T23:59:59Z'."""
+
+    return [r for r in data if not (r.get('End Time') or '').startswith('9999-12-31')]
+
+def process_eventframes_to_csv(data, current_site, csv_filename=None):
+    """Process eventframe data and write to CSV format"""
+    if csv_filename is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        csv_filename = f"eventframes_{current_site.lower()}_{timestamp}.csv"
+    
+    float_cols = {'excursion_value', 'sdlh', 'soldh', 'sdll', 'soll', 'maximum_value', 'minimum_value', 'sdl_limit','excursion_duration'}
+    datetime_cols = {'start_time', 'end_time','start_time_utc','end_time_utc', 'last_update'}
+    map_db_col = get_map_db_col(current_site)
+    
+    success_count = 0
+    time_when_processed = datetime.now()
+    start_timer = timer.time()
+    
+    processed_data = []
+    
     for idx, row in enumerate(data, 1):
-        values = []
         temp_row = {}
+        
         for col in EVENTFRAME_TEMP_COLUMNS:
             if col == 'sdl_limit':
                 sdl_limit = None
@@ -75,7 +232,7 @@ def insert_eventframes(conn, data, current_site, table_name=None):
                         break
                 val = sdl_limit
             elif col == 'last_update':
-                val = time_when_inserted
+                val = time_when_processed
             elif col == 'site':
                 val = current_site
             else:
@@ -116,51 +273,39 @@ def insert_eventframes(conn, data, current_site, table_name=None):
                         val = None
                 elif col == 'tag_name' and isinstance(val, str):
                     val = re.split(r'[ _]', val)[0]
+            
             temp_row[col] = val
-            values.append(val)
-        try:
-            cursor.execute(insert_sql, values)
-            success_count += 1
-            if idx % 50 == 0:
-                print(f"Inserted {idx} rows...")
-        except Exception as e:
-            print(f"Error inserting row {idx} with Id={row.get('Id')}: {e}")
-    conn.commit()
-    end_timer = timer.time()
-    elapsed = end_timer - start_timer
-    print(f"Inserted {success_count} rows into '{table_name}'. (Attempted {len(data)})")
-    print(f"Database write time: {elapsed:.2f} seconds.")
-
-def delete_rows_for_site(conn, site, table_name=None):
-    if table_name is None:
-        table_name = EVENTFRAME_TEMP_TABLE
-    cursor = conn.cursor()
-    sql = f"DELETE FROM {table_name} WHERE site = ?"
+        
+        processed_data.append(temp_row)
+        success_count += 1
+        
+        if idx % 50 == 0:
+            print(f"Processed {idx} rows...")
+    
+    # Write to CSV
     try:
-        cursor.execute(sql, site)
-        conn.commit()
-        print(f"Deleted all rows for site '{site}' from table '{table_name}'.")
+        with open(csv_filename, 'w', newline='', encoding='utf-8') as csvfile:
+            if processed_data:
+                writer = csv.DictWriter(csvfile, fieldnames=EVENTFRAME_TEMP_COLUMNS)
+                writer.writeheader()
+                writer.writerows(processed_data)
+        
+        end_timer = timer.time()
+        elapsed = end_timer - start_timer
+        print(f"Wrote {success_count} rows to '{csv_filename}'. (Attempted {len(data)})")
+        print(f"CSV write time: {elapsed:.2f} seconds.")
+        print(f"File saved at: {os.path.abspath(csv_filename)}")
+        
     except Exception as e:
-        print(f"Error deleting rows for site '{site}': {e}")
-
-def get_last_update_time(conn, site):
-    cursor = conn.cursor()
-    sql = f"SELECT MAX(last_update) FROM {EVENTFRAME_TEMP_TABLE} WHERE site = ?"
-    cursor.execute(sql, site)
-    result = cursor.fetchone()
-    return result[0] if result and result[0] else None
-
-def clean_eventframe_data(data):
-    """Remove any row where 'End Time' is '9999-12-31T23:59:59Z'."""
-
-    return [r for r in data if not (r.get('End Time') or '').startswith('9999-12-31')]
+        print(f"Error writing to CSV: {e}")
+        raise
 
 if __name__ == "__main__":
     print(f"--- SQL Server Connection ---")
     print(f"SQL Server: {DB_CONFIG['server']}/{DB_CONFIG['database']}")
     print("-" * 40)
     if len(sys.argv) < 2:
-        print("Usage: python etl_to_sql.py [init|populate <site>|run]")
+        print("Usage: python etl_to_sql.py [init|populate <site>|workbook <site>|run]")
         sys.exit(1)
     command = sys.argv[1].lower()
     conn = get_db_connection()
@@ -192,6 +337,49 @@ if __name__ == "__main__":
         print("\n--- Test Complete ---")
         conn.close()
 
+    elif command == "workbook":
+        if len(sys.argv) < 3:
+            print("Usage: python etl_to_sql.py workbook <site>")
+            sys.exit(1)
+        site = sys.argv[2].upper()  # Ensure consistent case
+        if site not in SITES:
+            print(f"Site '{site}' not recognized. Valid sites: {SITES}")
+            sys.exit(1)
+        
+        print(f"Fetching event frame data for site: {site} via webapi_ETL.py...")
+        
+        # Define date range
+        start_date = datetime(2025, 7, 1, tzinfo=timezone.utc)
+        end_date = datetime.now(timezone.utc)
+
+        total_days = (end_date - start_date).days
+        
+        print(f"Processing {total_days} days from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')} in one batch")
+        
+        # Format times for API call
+        batch_start = start_date.strftime('%Y-%m-%dT00:00:00')
+        batch_end = end_date.strftime('%Y-%m-%dT00:00:00')
+        
+        print(f"Batch start: {batch_start}, Batch end: {batch_end}")
+        print(f"\n--- Processing {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')} ---")
+        
+        # Fetch all data in one call
+        data, _ = fetch_eventframes(site, batch_start, batch_end, True)
+        data = clean_eventframe_data(data)
+        print(f"Loaded {len(data)} rows from PI Web API for {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}.")
+        
+        if data:
+            # Generate CSV filename with date range
+            start_str = start_date.strftime('%Y%m%d')
+            end_str = (end_date - timedelta(days=1)).strftime('%Y%m%d')  # Subtract 1 day since end_date is exclusive
+            csv_filename = f"eventframes_{site.lower()}_{start_str}_to_{end_str}.csv"
+            process_eventframes_to_csv(data, site, csv_filename)
+            print(f"CSV export complete for {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}.")
+        else:
+            print(f"No data to export for {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}.")
+        
+        print(f"\n--- Workbook Export Complete for {site} ---")
+
     elif command == "test":
         site = "CHILE"
         print(f"[TESTING] Running ETL for site: {site}")
@@ -214,7 +402,7 @@ if __name__ == "__main__":
                     conn = get_db_connection()
                     print(f"Checking for new events for site: {site}")
                     # Get the last 1 days from now (UTC)
-                    start_time = (datetime.now(timezone.utc) - timedelta(hours=8)).replace(microsecond=0).isoformat()
+                    start_time = (datetime.now(timezone.utc) - timedelta(hours=360)).replace(microsecond=0).isoformat()
                     print(f"Fetching events for {site} from: {start_time}")
                     data, _ = fetch_eventframes(site,start_time)
                     data = clean_eventframe_data(data)
@@ -232,6 +420,6 @@ if __name__ == "__main__":
         finally:
             conn.close()
     else:
-        print("Unknown command. Usage: python etl_to_sql.py [init|populate <site>|run]")
+        print("Unknown command. Usage: python etl_to_sql.py [init|populate <site>|workbook <site>|run]")
         conn.close()
         sys.exit(1)

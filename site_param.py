@@ -26,8 +26,15 @@ SITES_PARAM = {
         'TEMPLATE_NAME': 'Excursion template',
         'TIMEZONE': 'America/Edmonton',
         'AUTH':'BASIC'
+    },
+    'GEISMAR': {
+        'PIWEBAPI_URL': 'https://usgei-piap02.methanex.com/piwebapi',
+        'ASSET_DATABASE_WEBID': 'F1RDxSQ6_dR9nE6dPqMFyGl6eguKX3z6x5I0KMowmlaq5D_wVVNHRUlQSUFGXEdMT0JBTCBTREwtU09M',
+        'TEMPLATE_NAME': 'Excursion template',
+        'TIMEZONE': 'America/Chicago',
+        'AUTH':'BASIC'
     }
 }
-SITES = ['TRINIDAD', 'CHILE', 'EGYPT', 'MEDICINE HAT']
+SITES = ['TRINIDAD', 'CHILE', 'EGYPT', 'MEDICINE HAT', 'GEISMAR']
 SITES_RUN = ['TRINIDAD', 'CHILE', 'EGYPT', 'MEDICINE HAT']
 
