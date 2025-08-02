@@ -3,3 +3,4 @@
 /__pycache__
 # CSV files
 *.csv
+.vscode/

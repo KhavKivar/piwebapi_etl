@@ -455,15 +455,36 @@ def insert_eventframes(conn, data, current_site, table_name=None, use_fast_inser
     print(f"⏱️  Database write time: {elapsed:.2f} seconds.")
 
 def _fast_batch_insert(cursor, conn, data, current_site, time_when_inserted, insert_sql):
-    """Perform fast batch insert operation."""
+    """Perform fast batch insert operation with duplicate ID removal."""
     data_parse = []
+    seen_ids = set()
+    duplicate_count = 0
+    
+    # Find the index of the 'id' column
+    id_index = EVENTFRAME_TEMP_COLUMNS.index('id')
     
     for idx, row in enumerate(data, 1):
         row_values = process_row_data(row, current_site, time_when_inserted)
+        
+        # Get the ID value for this row
+        row_id = row_values[id_index]
+        
+        # Skip if we've already seen this ID
+        if row_id in seen_ids:
+            duplicate_count += 1
+            continue
+        
+        # Add to seen IDs and data to insert
+        seen_ids.add(row_id)
         data_parse.append(row_values)
         
         if idx % 100 == 0:
             print(f"  Processed {idx} rows...")
+    
+    # Report duplicate removal
+    if duplicate_count > 0:
+        print(f"🗑️  Removed {duplicate_count} duplicate records based on ID")
+        print(f"📊 Final record count for insertion: {len(data_parse)}")
 
     try:
         cursor.executemany(insert_sql, data_parse)
@@ -652,7 +673,7 @@ def main():
             print(f"🔄 Fetching event frame data for site: {site}")
             
             # Define date range (last 6 months)
-            start_date = datetime(2025, 7, 1, tzinfo=timezone.utc)
+            start_date = datetime(2025, 7, 28, tzinfo=timezone.utc)
             end_date = datetime.now(timezone.utc)
             total_days = (end_date - start_date).days
             
@@ -661,7 +682,7 @@ def main():
             
             # Fetch data
             batch_start = start_date.strftime('%Y-%m-%dT00:00:00')
-            batch_end = end_date.strftime('%Y-%m-%dT00:00:00')
+            batch_end = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')
             
             data, _ = fetch_eventframes(site, batch_start, batch_end, True)
             
@@ -684,7 +705,7 @@ def main():
             create_eventframe_temp_table(conn, table_name=EVENTFRAME_TEMP_TABLE_TEST)
             
             print(f"🔄 Fetching test data...")
-            start_time = '2025-01-01T00:00:00'
+            start_time = '2025-07-28T00:00:00'
             data, _ = fetch_eventframes(site, start_time, datetime.now(timezone.utc), True)
             
             print(f"📊 Loaded {len(data)} test rows from PI Web API.")

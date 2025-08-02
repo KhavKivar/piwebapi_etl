@@ -48,7 +48,7 @@ load_dotenv()
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Threading configuration
-MAX_WORKERS = 20          # Parallel EventFrame fetches
+MAX_WORKERS = 40          # Parallel EventFrame fetches
 ATTR_MAX_WORKERS = 5      # Parallel attribute fetches per EventFrame
 CHUNK_SIZE = 1000         # Max EventFrames per API call
 
